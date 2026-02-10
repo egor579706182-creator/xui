@@ -3,7 +3,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { UserAnswer, AnalysisResult } from "../types";
 
 export const analyzeStartupIdea = async (answers: UserAnswer[]): Promise<AnalysisResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Защита от краша, если process.env недоступен
+  const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+  
+  if (!apiKey) {
+    throw new Error("API_KEY не обнаружен. Настрой переменную окружения в Vercel.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
     User has a business idea (could be IT, offline, services, manufacturing, etc.). They answered 10 questions.
