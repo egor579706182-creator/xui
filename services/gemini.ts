@@ -2,12 +2,46 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserAnswer, AnalysisResult } from "../types";
 
+const getApiKey = () => typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+
+export const validateApiKey = async (): Promise<{ valid: boolean; error?: string }> => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return { 
+      valid: false, 
+      error: "API_KEY не обнаружен в переменных окружения. Если ты на Vercel, проверь Settings -> Environment Variables. Без ключа магии не будет." 
+    };
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    // Делаем минимальный запрос для проверки работоспособности ключа
+    await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: "ping",
+    });
+    return { valid: true };
+  } catch (e: any) {
+    console.error("API Key validation failed", e);
+    let message = "Проблема с API ключом: ";
+    if (e.message?.includes("401") || e.message?.toLowerCase().includes("unauthorized")) {
+      message += "Ключ невалиден. Проверь, правильно ли ты его скопировал из AI Studio.";
+    } else if (e.message?.includes("403") || e.message?.toLowerCase().includes("forbidden")) {
+      message += "Доступ запрещен. Возможно, API Gemini недоступен в твоем регионе или для этого ключа.";
+    } else if (e.message?.includes("429")) {
+      message += "Слишком много запросов (Quota exceeded). Подожди немного.";
+    } else {
+      message += e.message || "Неизвестная ошибка при проверке связи с Google Gemini.";
+    }
+    return { valid: false, error: message };
+  }
+};
+
 export const analyzeStartupIdea = async (answers: UserAnswer[]): Promise<AnalysisResult> => {
-  // Защита от краша, если process.env недоступен
-  const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+  const apiKey = getApiKey();
   
   if (!apiKey) {
-    throw new Error("API_KEY не обнаружен. Настрой переменную окружения в Vercel.");
+    throw new Error("API_KEY не обнаружен.");
   }
 
   const ai = new GoogleGenAI({ apiKey });

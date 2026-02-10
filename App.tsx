@@ -2,16 +2,29 @@
 import React, { useState, useEffect } from 'react';
 import { QUESTIONS, LOADING_MESSAGES } from './constants';
 import { UserAnswer, AnalysisResult } from './types';
-import { analyzeStartupIdea } from './services/gemini';
+import { analyzeStartupIdea, validateApiKey } from './services/gemini';
 
 const App: React.FC = () => {
-  const [step, setStep] = useState<'intro' | 'quiz' | 'loading' | 'result'>('intro');
+  const [step, setStep] = useState<'checking_api' | 'intro' | 'quiz' | 'loading' | 'result'>('checking_api');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<UserAnswer[]>([]);
   const [currentInputValue, setCurrentInputValue] = useState('');
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkApi = async () => {
+      const { valid, error } = await validateApiKey();
+      if (valid) {
+        setStep('intro');
+      } else {
+        setApiError(error || "Неизвестная ошибка API.");
+      }
+    };
+    checkApi();
+  }, []);
 
   useEffect(() => {
     if (step === 'loading') {
@@ -66,6 +79,34 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8">
       <div className="max-w-3xl w-full">
         
+        {step === 'checking_api' && !apiError && (
+          <div className="text-center space-y-6">
+            <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-xl font-bold uppercase tracking-widest animate-pulse">Проверяем связь с космосом...</p>
+          </div>
+        )}
+
+        {apiError && (
+          <div className="neo-brutalism-border bg-red-900/40 p-10 space-y-6 text-center">
+            <h1 className="text-4xl font-black text-red-500 uppercase glitch-text">ПРОБЛЕМА С API</h1>
+            <div className="bg-black p-6 border-2 border-red-500 text-left">
+              <p className="text-xl font-bold text-red-200 leading-relaxed">
+                {apiError}
+              </p>
+            </div>
+            <p className="text-gray-400 font-bold uppercase">
+              Приложение не может работать без связи с мозгами Gemini. 
+              Настрой API_KEY и обнови страницу.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="neo-brutalism-btn bg-red-600 text-white px-8 py-3 font-black uppercase"
+            >
+              Я ВСЕ ПОПРАВИЛ, ОБНОВЛЯЙ
+            </button>
+          </div>
+        )}
+
         {step === 'intro' && (
           <div className="text-center space-y-8 animate-in fade-in duration-700">
             <h1 className="text-4xl md:text-6xl font-extrabold uppercase glitch-text mb-4 italic">
