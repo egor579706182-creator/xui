@@ -14,17 +14,43 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const checkApi = async () => {
-      const { valid, error } = await validateApiKey();
-      if (valid) {
+  const checkApi = async () => {
+    setApiError(null);
+    setStep('checking_api');
+    
+    // Сначала проверяем стандартный process.env
+    const { valid, error } = await validateApiKey();
+    if (valid) {
+      setStep('intro');
+      return;
+    }
+
+    // Если ключа нет в окружении, проверяем, не находимся ли мы в среде AI Studio
+    const aiStudio = (window as any).aistudio;
+    if (aiStudio && typeof aiStudio.hasSelectedApiKey === 'function') {
+      const hasKey = await aiStudio.hasSelectedApiKey();
+      if (hasKey) {
         setStep('intro');
       } else {
-        setApiError(error || "Неизвестная ошибка API.");
+        setApiError("Нужно выбрать API ключ в настройках среды или через кнопку ниже.");
       }
-    };
+    } else {
+      setApiError(error || "Проблема с доступом к API Gemini.");
+    }
+  };
+
+  useEffect(() => {
     checkApi();
   }, []);
+
+  const handleOpenSelectKey = async () => {
+    const aiStudio = (window as any).aistudio;
+    if (aiStudio && typeof aiStudio.openSelectKey === 'function') {
+      await aiStudio.openSelectKey();
+      // После открытия диалога считаем, что ключ будет выбран, и пробуем запустить приложение
+      setStep('intro');
+    }
+  };
 
   useEffect(() => {
     if (step === 'loading') {
@@ -94,16 +120,28 @@ const App: React.FC = () => {
                 {apiError}
               </p>
             </div>
-            <p className="text-gray-400 font-bold uppercase">
-              Приложение не может работать без связи с мозгами Gemini. 
-              Настрой API_KEY и обнови страницу.
+            
+            <div className="flex flex-col gap-4">
+              <button 
+                onClick={checkApi}
+                className="neo-brutalism-btn bg-white text-black px-8 py-3 font-black uppercase hover:bg-gray-200"
+              >
+                ПОВТОРИТЬ ПРОВЕРКУ
+              </button>
+              
+              {(window as any).aistudio && (
+                <button 
+                  onClick={handleOpenSelectKey}
+                  className="neo-brutalism-btn bg-blue-600 text-white px-8 py-3 font-black uppercase"
+                >
+                  ВЫБРАТЬ API КЛЮЧ
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-gray-500 font-bold uppercase mt-4">
+              Подсказка для Vercel: Убедись, что переменная называется API_KEY и ты сделал новый Deploy после её добавления.
             </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="neo-brutalism-btn bg-red-600 text-white px-8 py-3 font-black uppercase"
-            >
-              Я ВСЕ ПОПРАВИЛ, ОБНОВЛЯЙ
-            </button>
           </div>
         )}
 
@@ -115,7 +153,6 @@ const App: React.FC = () => {
             <p className="text-xl text-gray-400 font-bold border-l-4 border-white pl-4 text-left">
               Заебало слушать "гениальные" бизнес-идеи за пивом? Пройди этот тест, и наш ИИ-консультант 
               объяснит тебе, почему твой проект — это либо будущий рынок, либо полная хуйня. 
-              Любой бизнес: от мобильного приложения до продажи шаурмы.
             </p>
             {error && (
               <div className="bg-red-900/50 border-2 border-red-500 p-4 text-red-200 font-bold mb-4">
@@ -185,7 +222,6 @@ const App: React.FC = () => {
         {step === 'result' && result && (
           <div className="space-y-8 animate-in slide-in-from-bottom duration-500 pb-20">
             <div className="text-center">
-              <h2 className="text-sm font-bold uppercase text-gray-500 mb-2">Вердикт по проекту:</h2>
               <h1 className="text-4xl md:text-6xl font-black uppercase glitch-text mb-6">
                 {result.title}
               </h1>
@@ -217,7 +253,7 @@ const App: React.FC = () => {
 
               <div className="neo-brutalism-border bg-[#111] p-6">
                 <h3 className="text-xl font-black uppercase mb-4 text-white underline decoration-4 decoration-yellow-400">
-                  Монетизация (бабки)
+                  Бабки (Монетизация)
                 </h3>
                 <p className="text-lg text-gray-300 italic">
                   {result.monetization}
@@ -258,7 +294,7 @@ const App: React.FC = () => {
                 onClick={() => setStep('intro')}
                 className="neo-brutalism-btn bg-black text-white px-8 py-3 text-lg font-bold uppercase hover:bg-gray-900 border-gray-400"
               >
-                Ебать, еще одну идею проверю!
+                ЕЩЕ ОДНУ ИДЕЮ!
               </button>
             </div>
           </div>
@@ -266,7 +302,7 @@ const App: React.FC = () => {
       </div>
       
       <footer className="fixed bottom-4 right-4 text-xs font-bold text-gray-600 uppercase tracking-tighter">
-        НЕ ДЛЯ СЛАБОНЕРВНЫХ ХИПСТЕРОВ
+        НЕ ДЛЯ СЛАБОНЕРВНЫХ
       </footer>
     </div>
   );

@@ -2,49 +2,45 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserAnswer, AnalysisResult } from "../types";
 
-const getApiKey = () => typeof process !== 'undefined' ? process.env.API_KEY : undefined;
-
 export const validateApiKey = async (): Promise<{ valid: boolean; error?: string }> => {
-  const apiKey = getApiKey();
+  const apiKey = process.env.API_KEY;
+  
   if (!apiKey) {
     return { 
       valid: false, 
-      error: "API_KEY не обнаружен в переменных окружения. Если ты на Vercel, проверь Settings -> Environment Variables. Без ключа магии не будет." 
+      error: "API_KEY не обнаружен в process.env. На Vercel убедись, что переменная добавлена в Settings -> Environment Variables и нажми Redeploy." 
     };
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
-    // Делаем минимальный запрос для проверки работоспособности ключа
+    // Простейший запрос для проверки валидности ключа
     await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: "ping",
+      contents: "test",
     });
     return { valid: true };
   } catch (e: any) {
     console.error("API Key validation failed", e);
-    let message = "Проблема с API ключом: ";
-    if (e.message?.includes("401") || e.message?.toLowerCase().includes("unauthorized")) {
-      message += "Ключ невалиден. Проверь, правильно ли ты его скопировал из AI Studio.";
-    } else if (e.message?.includes("403") || e.message?.toLowerCase().includes("forbidden")) {
-      message += "Доступ запрещен. Возможно, API Gemini недоступен в твоем регионе или для этого ключа.";
-    } else if (e.message?.includes("429")) {
-      message += "Слишком много запросов (Quota exceeded). Подожди немного.";
+    let message = "Ошибка API Gemini: ";
+    const errStr = e.toString().toLowerCase();
+    
+    if (errStr.includes("401") || errStr.includes("unauthorized") || errStr.includes("key not valid")) {
+      message += "Ключ недействителен. Проверь его в Google AI Studio.";
+    } else if (errStr.includes("403") || errStr.includes("forbidden")) {
+      message += "Доступ запрещен. Возможно, регион не поддерживается или ключ заблокирован.";
+    } else if (errStr.includes("429") || errStr.includes("quota")) {
+      message += "Исчерпан лимит запросов (Quota Exceeded).";
     } else {
-      message += e.message || "Неизвестная ошибка при проверке связи с Google Gemini.";
+      message += e.message || "Не удалось связаться с сервером Google.";
     }
     return { valid: false, error: message };
   }
 };
 
 export const analyzeStartupIdea = async (answers: UserAnswer[]): Promise<AnalysisResult> => {
-  const apiKey = getApiKey();
-  
-  if (!apiKey) {
-    throw new Error("API_KEY не обнаружен.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Создаем экземпляр прямо перед вызовом, чтобы использовать актуальный ключ
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
     User has a business idea (could be IT, offline, services, manufacturing, etc.). They answered 10 questions.
@@ -65,29 +61,17 @@ export const analyzeStartupIdea = async (answers: UserAnswer[]): Promise<Analysi
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          title: { type: Type.STRING, description: "Catchy, sarcastic name for the project idea." },
-          verdict: { type: Type.STRING, description: "A brutal reality check. Is it good or total trash?" },
-          techStack: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING },
-            description: "Suggested operations/tools/tech (e.g., Shopify, CRM, or just a heavy shovel)."
-          },
-          monetization: { type: Type.STRING, description: "How to actually make money." },
-          risks: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING },
-            description: "Why this will likely fail."
-          },
-          nextSteps: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING },
-            description: "Concrete actions to take now."
-          },
-          sarcasticComment: { type: Type.STRING, description: "Final punchline." }
+          title: { type: Type.STRING },
+          verdict: { type: Type.STRING },
+          techStack: { type: Type.ARRAY, items: { type: Type.STRING } },
+          monetization: { type: Type.STRING },
+          risks: { type: Type.ARRAY, items: { type: Type.STRING } },
+          nextSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
+          sarcasticComment: { type: Type.STRING }
         },
         required: ["title", "verdict", "techStack", "monetization", "risks", "nextSteps", "sarcasticComment"]
       },
-      systemInstruction: "Ты — циничный серийный предприниматель и венчурный инвестор с плохим настроением. Твоя задача — разнести бизнес-идею пользователя в пух и прах, но при этом дать реально работающие советы по реализации. Используй мат для стилистики, но оставайся профессионалом в плане экономики и бизнес-процессов. Если идея не про IT, не предлагай писать код, предлагай бизнес-инструменты."
+      systemInstruction: "Ты — циничный серийный предприниматель и венчурный инвестор. Твоя задача — разнести бизнес-идею пользователя в пух и прах, но при этом дать реально работающие советы по реализации. Используй мат для стилистики. Если идея не про IT, предлагай бизнес-инструменты."
     }
   });
 
@@ -95,7 +79,6 @@ export const analyzeStartupIdea = async (answers: UserAnswer[]): Promise<Analysi
     const result = JSON.parse(response.text.trim());
     return result as AnalysisResult;
   } catch (e) {
-    console.error("Failed to parse AI response", e);
-    throw new Error("AI выдал какую-то дичь, попробуй еще раз.");
+    throw new Error("AI вернул некорректный формат данных. Попробуй еще раз.");
   }
 };

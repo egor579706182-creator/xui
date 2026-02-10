@@ -43,6 +43,10 @@
             background: #666;
         }
     </style>
+    <script>
+        // Shim для поддержки process.env в браузере
+        window.process = window.process || { env: {} };
+    </script>
 <script type="importmap">
 {
   "imports": {
@@ -57,7 +61,6 @@
 </head>
 <body>
     <div id="root"></div>
-    <!-- Точка входа в приложение -->
     <script type="module" src="index.tsx"></script>
 </body>
 </html>
