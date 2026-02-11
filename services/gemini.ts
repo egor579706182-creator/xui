@@ -3,58 +3,59 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { UserAnswer, AnalysisResult } from "../types";
 
 export const validateApiKey = async (): Promise<{ valid: boolean; error?: string }> => {
+  // Пытаемся получить ключ из разных возможных мест (стандартный процесс)
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey) {
+  console.log("Checking API_KEY availability...");
+
+  if (!apiKey || apiKey === "undefined" || apiKey.length < 5) {
     return { 
       valid: false, 
-      error: "API_KEY не обнаружен в process.env. На Vercel убедись, что переменная добавлена в Settings -> Environment Variables и нажми Redeploy." 
+      error: "Ключ не найден в коде. В Vercel переменные прописываются ПЕРЕД сборкой. Если ты добавил ключ только что — нажми кнопку 'Redeploy' во вкладке Deployments." 
     };
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
-    // Простейший запрос для проверки валидности ключа
+    // Делаем минимальный запрос для реальной проверки работоспособности ключа
     await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: "test",
+      contents: "hi",
     });
     return { valid: true };
   } catch (e: any) {
-    console.error("API Key validation failed", e);
-    let message = "Ошибка API Gemini: ";
+    console.error("Gemini Validation Error:", e);
     const errStr = e.toString().toLowerCase();
+    let message = "Ошибка API: ";
     
-    if (errStr.includes("401") || errStr.includes("unauthorized") || errStr.includes("key not valid")) {
-      message += "Ключ недействителен. Проверь его в Google AI Studio.";
-    } else if (errStr.includes("403") || errStr.includes("forbidden")) {
-      message += "Доступ запрещен. Возможно, регион не поддерживается или ключ заблокирован.";
-    } else if (errStr.includes("429") || errStr.includes("quota")) {
-      message += "Исчерпан лимит запросов (Quota Exceeded).";
+    if (errStr.includes("api key not valid") || errStr.includes("401")) {
+      message = "API ключ невалиден. Проверь, нет ли лишних пробелов в настройках Vercel.";
+    } else if (errStr.includes("quota") || errStr.includes("429")) {
+      message = "Закончились лимиты (Quota Exceeded). Попробуй другой ключ.";
     } else {
-      message += e.message || "Не удалось связаться с сервером Google.";
+      message += e.message || "Неизвестная ошибка связи с Google.";
     }
     return { valid: false, error: message };
   }
 };
 
 export const analyzeStartupIdea = async (answers: UserAnswer[]): Promise<AnalysisResult> => {
-  // Создаем экземпляр прямо перед вызовом, чтобы использовать актуальный ключ
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY missing at runtime");
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
-    User has a business idea (could be IT, offline, services, manufacturing, etc.). They answered 10 questions.
-    Analyze their idea with brutal honesty, sarcasm, and professional business depth.
-    Use Russian language. Keep the sarcastic and slightly profane tone (use words like 'хуйня', 'залупа', 'ебать' where appropriate but stay insightful).
-    
+    User startup idea analysis. 
     Answers:
     ${answers.map(a => `Q: ${a.questionText}\nA: ${a.answer}`).join('\n\n')}
     
-    Return a JSON response strictly following the schema.
+    Respond in Russian. Tone: Professional but brutal, sarcastic, uses mild Russian profanity for style.
+    Provide actionable business advice hidden inside the sarcasm.
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-pro-preview",
+    model: "gemini-3-flash-preview",
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -71,14 +72,9 @@ export const analyzeStartupIdea = async (answers: UserAnswer[]): Promise<Analysi
         },
         required: ["title", "verdict", "techStack", "monetization", "risks", "nextSteps", "sarcasticComment"]
       },
-      systemInstruction: "Ты — циничный серийный предприниматель и венчурный инвестор. Твоя задача — разнести бизнес-идею пользователя в пух и прах, но при этом дать реально работающие советы по реализации. Используй мат для стилистики. Если идея не про IT, предлагай бизнес-инструменты."
+      systemInstruction: "Ты — венчурный инвестор-мизантроп. Ты видел тысячи провальных стартапов и теперь ненавидишь человеческую глупость. Твоя цель — разнести идею, но если в ней есть зерно истины, подсказать как не сдохнуть в первый месяц. Используй слова 'херня', 'проеб', 'бабки'."
     }
   });
 
-  try {
-    const result = JSON.parse(response.text.trim());
-    return result as AnalysisResult;
-  } catch (e) {
-    throw new Error("AI вернул некорректный формат данных. Попробуй еще раз.");
-  }
+  return JSON.parse(response.text.trim());
 };
